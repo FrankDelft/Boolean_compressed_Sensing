@@ -28,8 +28,6 @@ def construct_measurements_randompool(x, M, p,N):
     Y = np.logical_or.reduce(A * X, axis=1).astype(int)
     return Y,A
 
-
-
 def nnomp(tolerance, y, A):
     r = y.copy()
     S = set()
