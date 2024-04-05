@@ -121,11 +121,11 @@ N = 100  # Size of each measurement
 #Load the data (the N*1 sparse vector)
 # ith value of 0: not infected and 1: infected
 #group_data M samples of size 100 patients
-group_data=loadmat('/home/frank/Documents/git/Boolean_compressed_Sensing/GroupTesting.mat')['x'][1:200,:N]
+group_data=loadmat('/home/frank/Documents/git/Boolean_compressed_Sensing/GroupTesting.mat')['x'][1:5,:N]
 
 # Define the range of values for p and M
-p_values =np.array([0.001,0.0025,0.005,0.01,0.05,0.1,0.2,0.4])
-M_values = np.arange(10, 211, 20)
+p_values =np.array([0.001,0.0025,0.005,0.0075,0.01,0.03,0.05,0.1])
+M_values = np.arange(10, 171, 20)
 
 # Initialize an empty dictionary to store the hamming distances
 hamming_distances_basis = { (p, M): 0 for p in p_values for M in M_values}
@@ -175,17 +175,15 @@ for i, p in enumerate(p_values):
 
 
 
-#Plot the heat map
-sns.heatmap(hamming_matrix_omp, xticklabels=M_values, yticklabels=p_values)
+# Plot the heat map
+sns.heatmap(hamming_matrix_omp, xticklabels=M_values, yticklabels=p_values[::-1], cmap='Greens')
 plt.xlabel('M (Number of Measurements)')
 plt.ylabel('p (Probability)')
 plt.title('Total Hamming Distance for NNOMP')
 plt.show()
 
-
 # Plot the heat map
-print(hamming_distances_basis)
-sns.heatmap(hamming_matrix_basis, xticklabels=M_values, yticklabels=p_values)
+sns.heatmap(hamming_matrix_basis, xticklabels=M_values,  yticklabels=p_values[::-1], cmap='Greens')
 plt.xlabel('M (Number of Measurements)')
 plt.ylabel('p (Probability)')
 plt.title('Total Hamming Distance for basis pursuit')
