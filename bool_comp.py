@@ -29,7 +29,7 @@ def construct_measurements_randompool(x, M, p, N):
     Y = np.logical_or.reduce(A * X, axis=1).astype(int)
     return Y,A
 
-def nnomp(tolerance, y, A):
+def nnomp(y, A, tolerance = 1e-40):
     r = y.copy()
     S = set()
     n = A.shape[1]
@@ -63,7 +63,7 @@ def nnomp(tolerance, y, A):
 
     return x_hat, S
 
-def basis_pursuit(y, A, c):
+def basis_pursuit(y, A, c=1):
     # n is the number of variables in the signal x we want to recover
     n = A.shape[1]
 
@@ -97,22 +97,25 @@ def basis_pursuit(y, A, c):
 
 def comp(y, A):
     # All items which do not occur in any negative tests are possibly defective, pd
-    return np.sum(A[y==0,:],0)==0
+    return np.sum(A[np.invert(y.astype(bool)),:],0)==0
 
 def dd(y, A):
     # If there is only one pd item in a positive test, it is definitely defective
     pd = comp(y, A)
     dd = np.full_like(pd, False)
-    for meas in A[y==1,:]:
-        if np.sum(meas[pd])==1: dd |= (meas==1)&pd
+    for meas in A[y.astype(bool),:]:
+        if np.sum(meas[pd])==1:
+            dd |= meas.astype(bool)&pd
     return dd
 
 def scomp(y,A):
-    pd = comp(y,A)
+    ndnd = comp(y,A)
     x_hat = dd(y,A)
-    unexplained = A[np.sum(A[], dtype=bool),:]
-# A = M*N
-
+    unexplained = A[y==1,:][[not np.any(meas.astype(bool)&x_hat) for meas in A[y==1,:]],:]
+    while (unexplained.any()):
+        x_hat[np.argmax(np.sum(unexplained,0)*ndnd)] = True
+        unexplained = A[y==1,:][[not np.any(meas.astype(bool)&x_hat) for meas in A[y==1,:]],:]
+    return x_hat
 
 def hamming_distance(array1, array2):
     """
@@ -143,20 +146,25 @@ def plot_hamming_heatmap(distance_matrix, method_name):
 # Parameters
 
 N = 100  # Size of each measurement
+groups = 5
 #Load the data (the N*1 sparse vector)
 # ith value of 0: not infected and 1: infected
 #group_data M samples of size 100 patients
-group_data=loadmat('GroupTesting.mat')['x'][1:5,:N]
+group_data=loadmat('GroupTesting.mat')['x'][0:groups,:N]
 
 # Define the range of values for p and M
-p_values =np.array([0.001,0.0025,0.005,0.0075,0.01,0.03,0.05,0.1])
+p_values =np.array([0.001,0.0025,0.005,0.0075,0.01,0.03,0.05,0.1,0.4])
 M_values = np.arange(10, 171, 20)
 
 # Initialize an empty dictionary to store the hamming distances
-hamming_distances_basis = np.zeros((len(p_values),len(M_values)))
-hamming_distances_omp = hamming_distances_basis.copy()
-hamming_distances_comp = hamming_distances_basis.copy()
-hamming_distances_dd = hamming_distances_basis.copy()
+algorithms = {"basis pursuit":basis_pursuit,
+          "Orthogonal Matching Pursuit":nnomp,
+          "COMP":comp,
+          "DD":dd,
+          "SCOMP":scomp}
+
+
+hamming_distance_mat_dict = {key:np.zeros((len(p_values),len(M_values))) for key in algorithms}
 
 
 # Iterate over p and M values
@@ -164,45 +172,27 @@ for ind_p,p in enumerate(p_values):
     for ind_M,M in enumerate(M_values):
         print("p: ",p,"\t M:", M)
         # Initialize the total hamming distance for basis pursuit
-        total_hamming_omp = 0
-        total_hamming_basis = 0
-        total_hamming_comp = 0
-        total_hamming_dd = 0
+        tot_hamming_distance_dict = {key:0 for key in algorithms}
 
         # Iterate over group_data
         for i, s in enumerate(group_data):
             Y, A = construct_measurements_randompool(s, M, p, N)
 
-            # omp
-            z_omp = nnomp(10**-40,Y,A)[0]
-            z_omp = np.ceil(z_omp)
-
-            # basis pursuit
-            try:
-                z_basis = dd(Y, A)
-                z_basis = basis_pursuit(Y, A, 1)
-            except:
-                print("failed")
-                z_basis=np.zeros(N)
-
-            # comp
-            z_comp = comp(Y,A)
-
-            # dd
-            z_dd = dd(Y,A)
-
-            total_hamming_omp += hamming_distance(s, z_omp)
-            total_hamming_basis += hamming_distance(s, z_basis)
-            total_hamming_comp += hamming_distance(s, z_comp)
-            total_hamming_dd += hamming_distance(s, z_dd)
+            for key, algo in algorithms.items():
+                if key == "basis pursuit":
+                    try:
+                        z = basis_pursuit(Y, A, 1)
+                    except:
+                        print("failed")
+                        z=np.zeros(N)
+                else:
+                    z = algo(Y,A)
+                if key == "Orthogonal Matching Pursuit": z = np.ceil(z[0])
+                tot_hamming_distance_dict[key] += hamming_distance(s, z)
 
         # Store the total hamming distance for this p and M combination
-        hamming_distances_omp[ind_p,ind_M] = total_hamming_omp
-        hamming_distances_basis[ind_p,ind_M] = total_hamming_basis
-        hamming_distances_comp[ind_p,ind_M] = total_hamming_comp
-        hamming_distances_dd[ind_p,ind_M] = total_hamming_dd
+        for key in algorithms:
+            hamming_distance_mat_dict[key][ind_p,ind_M] = tot_hamming_distance_dict[key]/groups
 
-plot_hamming_heatmap(hamming_distances_omp, "NNOMP")
-plot_hamming_heatmap(hamming_distances_basis, "basis pursuit")
-plot_hamming_heatmap(hamming_distances_comp, "COMP")
-plot_hamming_heatmap(hamming_distances_dd, "DD")
+for key in algorithms:
+    plot_hamming_heatmap(hamming_distance_mat_dict[key], key)
