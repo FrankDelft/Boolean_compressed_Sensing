@@ -11,25 +11,24 @@ import time
 np.random.seed(0)
 
 #Function the generate the measurements based on random pooling using the binomial distribution
-def construct_measurements_randompool(x, M, p, N):
+def construct_measurements_randompool(x, M, A):
     """
     Constructs measurements based on the given parameters.
 
     Parameters:
     x (array-like): The input data.
     M (int): The number of measurements to construct.
-    p (float): The binomial probability.
+    A Random matrix 
 
     Returns:
     array-like: The constructed measurements.
 
     """
-    # Now let's define the A matrix as a M*N matrix
-    A = np.random.binomial(1, p, size=(M, N))
     # Construct the measurements
     X = np.tile(x, (M, 1))
     Y = np.logical_or.reduce(A * X, axis=1).astype(int)
-    return Y,A
+    return Y
+
 
 def nnomp(y, A, tolerance=1e-10, threshold=0.001):
     """
@@ -77,6 +76,7 @@ def nnomp(y, A, tolerance=1e-10, threshold=0.001):
     # Values may not be 0 or 1 as required by the algorithm, therefore thresholding is carried out
     x_hat = np.where(x_hat < threshold, 0, x_hat)  # This replaces values below threshold with 0
     x_hat = np.where(x_hat >= threshold, 1, x_hat)  # This sets values above or equal to threshold to 1
+    x_hat=x_hat.astype(bool)
     return x_hat
 
 def basis_pursuit(y, A, c=0.1, threshold=0.001):
@@ -119,8 +119,9 @@ def basis_pursuit(y, A, c=0.1, threshold=0.001):
         x_hat = np.where(x_hat >= threshold, 1, x_hat)  # This sets values above or equal to threshold to 1
 
     else:
-        print("Solution not found or problem is infeasible.")
+        # print("Solution not found or problem is infeasible.")
         x_hat = np.zeros(n)
+    x_hat=x_hat.astype(bool)
     return x_hat
 
 def comp(y, A):
@@ -215,7 +216,8 @@ def plot_hamming_heatmap(distance_matrix, method_name):
 
     """
     # Plot the heat map
-    sns.heatmap(distance_matrix, xticklabels=M_values, yticklabels=p_values[::-1], cmap='Greens')
+    # distance_matrix = distance_matrix[::-1]
+    sns.heatmap(distance_matrix[::-1],annot=True, xticklabels=M_values, yticklabels=p_values[::-1], cmap='Greens')
     plt.xlabel('M (Number of Measurements)')
     plt.ylabel('p (Probability)')
     plt.title(f'Total Hamming Distance for {method_name}')
@@ -223,7 +225,7 @@ def plot_hamming_heatmap(distance_matrix, method_name):
 
 def plot_time_heatmap(distance_matrix, method_name):
     # Plot the heat map
-    sns.heatmap(distance_matrix, xticklabels=M_values, yticklabels=p_values[::-1], cmap='Reds')
+    sns.heatmap(distance_matrix[::-1], xticklabels=M_values, yticklabels=p_values[::-1], cmap='Reds')
     plt.xlabel('M (Number of Measurements)')
     plt.ylabel('p (Probability)')
     plt.title(f'Total Process Time for {method_name}')
@@ -272,6 +274,7 @@ if __name__ == "__main__":
     # Initialize an empty dictionary to store the hamming distances
     hamming_distance_mat_dict = {key:np.zeros((len(p_values),len(M_values))) for key in algorithms}
     tot_perf_time_mat_dict = {key:np.zeros((len(p_values),len(M_values))) for key in algorithms}
+    matrix_meas_dict={}
 
     # Iterate over p and M values
     for ind_p,p in enumerate(p_values):
@@ -281,10 +284,11 @@ if __name__ == "__main__":
             tot_hamming_distance_dict = {key:0 for key in algorithms}
             tot_perf_time_dict = {key:0 for key in algorithms}
 
+            A = np.random.binomial(1, p, size=(M, N))
+            matrix_meas_dict[p,M]=A
             # Iterate over group_data
             for i, s in enumerate(group_data):
-                Y, A = construct_measurements_randompool(s, M, p, N)
-
+                Y= construct_measurements_randompool(s, M, A)
                 # Iterate over algorithms
                 for key, algo in algorithms.items():
                     # Apply the algorithm to obtain the estimated signal and track process time
@@ -300,6 +304,8 @@ if __name__ == "__main__":
 
                     # Update the total performance time for the current algorithm
                     tot_perf_time_dict[key] += (et-st)
+                    if(key=="basis pursuit" and M==70 and p==0.0075 ):
+                        print("heeeeeeeeeeere:",hamming_dist)
 
 
             # Store the total hamming distance for this p and M combination
@@ -325,10 +331,13 @@ if __name__ == "__main__":
     for key, algo in algorithms.items():
         # Iterate over group_data
         for i, s in enumerate(group_data):
-            Y, A = construct_measurements_randompool(s, M, p_dict[key], N)
+            A=matrix_meas_dict[p_dict[key],M]
+            Y= construct_measurements_randompool(s, M,A )
             # Apply the algorithm to obtain the estimated signal
             z = algo(Y, A)
             # Calculate the confusion matrix
             tot_confusion_dict[key] += confusion_matrix(s, z)
+            # print("Hamm:",hamming_distance(s,z),"\tkey:",key,"\tp:",p_dict[key])
+            # print(z,"\n",s)
 
     plot_confusion_matrices(tot_confusion_dict)
