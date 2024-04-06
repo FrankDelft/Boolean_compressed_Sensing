@@ -18,7 +18,7 @@ def construct_measurements_randompool(x, M, A):
     Parameters:
     x (array-like): The input data.
     M (int): The number of measurements to construct.
-    A Random matrix 
+    A Random matrix
 
     Returns:
     array-like: The constructed measurements.
@@ -322,9 +322,9 @@ if __name__ == "__main__":
     M=70
     p_dict = {"basis pursuit":0.0075,
             "Orthogonal Matching Pursuit":0.01,
-            "COMP":0.0025,
-            "DD":0.0025,
-            "SCOMP":0.0025}
+            "COMP":0.05,
+            "DD":0.05,
+            "SCOMP":0.05}
 
     tot_confusion_dict = {key:0 for key in algorithms}
 
