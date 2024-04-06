@@ -6,6 +6,7 @@ from scipy.optimize import nnls
 import cvxpy as cp
 import seaborn as sns
 from sklearn.metrics import confusion_matrix
+import time
 
 np.random.seed(0)
 
@@ -220,6 +221,13 @@ def plot_hamming_heatmap(distance_matrix, method_name):
     plt.title(f'Total Hamming Distance for {method_name}')
     plt.show()
 
+def plot_time_heatmap(distance_matrix, method_name):
+    # Plot the heat map
+    sns.heatmap(distance_matrix, xticklabels=M_values, yticklabels=p_values[::-1], cmap='Reds')
+    plt.xlabel('M (Number of Measurements)')
+    plt.ylabel('p (Probability)')
+    plt.title(f'Total Process Time for {method_name}')
+    plt.show()
 
 def plot_confusion_matrices(confusion_matrix_dict):
     """
@@ -241,78 +249,86 @@ def plot_confusion_matrices(confusion_matrix_dict):
     plt.tight_layout()
     plt.show()
 
-# Parameters
-N = 100  # Size of each measurement
-groups = 5
-#Load the data (the N*1 sparse vector)
-# ith value of 0: not infected and 1: infected
-#group_data M samples of size 100 patients
-group_data=loadmat('GroupTesting.mat')['x'][0:groups,:N]
+if __name__ == "__main__":
+    # Parameters
+    N = 100  # Size of each measurement
+    groups = 10
+    #Load the data (the N*1 sparse vector)
+    # ith value of 0: not infected and 1: infected
+    #group_data M samples of size 100 patients
+    group_data=loadmat('GroupTesting.mat')['x'][0:groups,:N]
 
-# Define the range of values for p and M
-p_values =np.array([0.001,0.0025,0.005,0.0075,0.01,0.03,0.05,0.1,0.4])
-M_values = np.arange(10, 171, 20)
+    # Define the range of values for p and M
+    p_values =np.array([0.001,0.0025,0.005,0.0075,0.01,0.03,0.05,0.1,0.4])
+    M_values = np.arange(10, 171, 20)
 
-algorithms = {"basis pursuit":basis_pursuit,
-          "Orthogonal Matching Pursuit":nnomp,
-          "COMP":comp,
-          "DD":dd,
-          "SCOMP":scomp}
+    algorithms = {
+            "basis pursuit":basis_pursuit,
+            "Orthogonal Matching Pursuit":nnomp,
+            "COMP":comp,
+            "DD":dd,
+            "SCOMP":scomp}
 
-# Initialize an empty dictionary to store the hamming distances
-hamming_distance_mat_dict = {key:np.zeros((len(p_values),len(M_values))) for key in algorithms}
+    # Initialize an empty dictionary to store the hamming distances
+    hamming_distance_mat_dict = {key:np.zeros((len(p_values),len(M_values))) for key in algorithms}
+    tot_perf_time_mat_dict = {key:np.zeros((len(p_values),len(M_values))) for key in algorithms}
+
+    # Iterate over p and M values
+    for ind_p,p in enumerate(p_values):
+        for ind_M,M in enumerate(M_values):
+            print("p: ",p,"\t M:", M)
+            # Initialize the total hamming distance for each algorithm
+            tot_hamming_distance_dict = {key:0 for key in algorithms}
+            tot_perf_time_dict = {key:0 for key in algorithms}
+
+            # Iterate over group_data
+            for i, s in enumerate(group_data):
+                Y, A = construct_measurements_randompool(s, M, p, N)
+
+                # Iterate over algorithms
+                for key, algo in algorithms.items():
+                    # Apply the algorithm to obtain the estimated signal and track process time
+                    st = time.process_time()
+                    z = algo(Y, A)
+                    et = time.process_time()
+
+                    # Calculate the hamming distance between the true signal and the estimated signal
+                    hamming_dist = hamming_distance(s, z)
+
+                    # Update the total hamming distance for the current algorithm
+                    tot_hamming_distance_dict[key] += hamming_dist
+
+                    # Update the total performance time for the current algorithm
+                    tot_perf_time_dict[key] += (et-st)
 
 
-# Iterate over p and M values
-for ind_p,p in enumerate(p_values):
-    for ind_M,M in enumerate(M_values):
-        print("p: ",p,"\t M:", M)
-        # Initialize the total hamming distance for each algorithm
-        tot_hamming_distance_dict = {key:0 for key in algorithms}
-        
+            # Store the total hamming distance for this p and M combination
+            for key in algorithms:
+                hamming_distance_mat_dict[key][ind_p,ind_M] = tot_hamming_distance_dict[key]/groups
+                tot_perf_time_mat_dict[key][ind_p,ind_M] = tot_perf_time_dict[key]/groups
+
+    for key in algorithms:
+        plot_hamming_heatmap(hamming_distance_mat_dict[key], key)
+        plot_time_heatmap(tot_perf_time_mat_dict[key], key)
+
+
+    #now lets calculate the confusion matrices for more optimal parameters
+    M=70
+    p_dict = {"basis pursuit":0.0075,
+            "Orthogonal Matching Pursuit":0.01,
+            "COMP":0.0025,
+            "DD":0.0025,
+            "SCOMP":0.0025}
+
+    tot_confusion_dict = {key:0 for key in algorithms}
+
+    for key, algo in algorithms.items():
         # Iterate over group_data
         for i, s in enumerate(group_data):
-            Y, A = construct_measurements_randompool(s, M, p, N)
-            
-            # Iterate over algorithms
-            for key, algo in algorithms.items():
-                # Apply the algorithm to obtain the estimated signal
-                z = algo(Y, A)
-                
-                # Calculate the hamming distance between the true signal and the estimated signal
-                hamming_dist = hamming_distance(s, z)
+            Y, A = construct_measurements_randompool(s, M, p_dict[key], N)
+            # Apply the algorithm to obtain the estimated signal
+            z = algo(Y, A)
+            # Calculate the confusion matrix
+            tot_confusion_dict[key] += confusion_matrix(s, z)
 
-                # Update the total hamming distance for the current algorithm
-                tot_hamming_distance_dict[key] += hamming_dist
-                    
-
-        # Store the total hamming distance for this p and M combination
-        for key in algorithms:
-            hamming_distance_mat_dict[key][ind_p,ind_M] = tot_hamming_distance_dict[key]/groups
-
-for key in algorithms:
-    plot_hamming_heatmap(hamming_distance_mat_dict[key], key)
-
-
-
-
-#now lets calculate the confusion matrices for more optimal parameters
-M=70
-p_dict = {"basis pursuit":0.0075,
-          "Orthogonal Matching Pursuit":0.01,
-          "COMP":0.0025,
-          "DD":0.0025,
-          "SCOMP":0.0025}
-
-tot_confusion_dict = {key:0 for key in algorithms}
-
-for key, algo in algorithms.items():
-    # Iterate over group_data
-    for i, s in enumerate(group_data):
-        Y, A = construct_measurements_randompool(s, M, p_dict[key], N)
-        # Apply the algorithm to obtain the estimated signal
-        z = algo(Y, A)
-        # Calculate the confusion matrix
-        tot_confusion_dict[key] += confusion_matrix(s, z)
-
-plot_confusion_matrices(tot_confusion_dict)
+    plot_confusion_matrices(tot_confusion_dict)
