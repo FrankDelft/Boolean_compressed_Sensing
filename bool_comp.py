@@ -30,7 +30,7 @@ def construct_measurements_randompool(x, M, A):
     return Y
 
 
-def nnomp(y, A, tolerance=1e-10, threshold=0.001):
+def nnomp(y, A, tolerance=1e-10, threshold=0.26):
     """
     Perform Non-negative Orthogonal Matching Pursuit (NNOMP) algorithm.
 
@@ -79,7 +79,7 @@ def nnomp(y, A, tolerance=1e-10, threshold=0.001):
     x_hat=x_hat.astype(bool)
     return x_hat
 
-def basis_pursuit(y, A, c=0.1, threshold=0.001):
+def basis_pursuit(y, A, c=0.1, threshold=0.26):
     """
     Solve the basis pursuit problem to recover a sparse signal.
 
@@ -221,6 +221,7 @@ def plot_hamming_heatmap(distance_matrix, method_name):
     plt.xlabel('M (Number of Measurements)')
     plt.ylabel('p (Probability)')
     plt.title(f'Total Hamming Distance for {method_name}')
+    plt.savefig(f'{method_name}_hamming_heatmap.png')
     plt.show()
 
 def plot_time_heatmap(distance_matrix, method_name):
@@ -229,9 +230,10 @@ def plot_time_heatmap(distance_matrix, method_name):
     plt.xlabel('M (Number of Measurements)')
     plt.ylabel('p (Probability)')
     plt.title(f'Total Process Time for {method_name}')
+    plt.savefig(f'{method_name}_time_heatmap.png')
     plt.show()
 
-def plot_confusion_matrices(confusion_matrix_dict):
+def plot_confusion_matrices(confusion_matrix_dict,p_dict):
     """
     Plot the confusion matrices for the given dictionary of confusion matrices.
 
@@ -245,7 +247,7 @@ def plot_confusion_matrices(confusion_matrix_dict):
     fig, axes = plt.subplots(len(confusion_matrix_dict), 1, figsize=(8, 6*len(confusion_matrix_dict)))
     for i, (key, matrix) in enumerate(confusion_matrix_dict.items()):
         sns.heatmap(matrix, annot=True, fmt='d', cmap='Blues', cbar=False, ax=axes[i])
-        axes[i].set_title(f'{key}')
+        axes[i].set_title(f'{key}, p={p_dict[key]}')
         axes[i].set_xlabel('Predicted Label')
         axes[i].set_ylabel('True Label')
     plt.tight_layout()
@@ -254,7 +256,7 @@ def plot_confusion_matrices(confusion_matrix_dict):
 if __name__ == "__main__":
     # Parameters
     N = 100  # Size of each measurement
-    groups = 10
+    groups = 1000  # Number of groups
     #Load the data (the N*1 sparse vector)
     # ith value of 0: not infected and 1: infected
     #group_data M samples of size 100 patients
@@ -301,11 +303,9 @@ if __name__ == "__main__":
 
                     # Update the total hamming distance for the current algorithm
                     tot_hamming_distance_dict[key] += hamming_dist
-
+        
                     # Update the total performance time for the current algorithm
                     tot_perf_time_dict[key] += (et-st)
-                    if(key=="basis pursuit" and M==70 and p==0.0075 ):
-                        print("heeeeeeeeeeere:",hamming_dist)
 
 
             # Store the total hamming distance for this p and M combination
@@ -334,10 +334,13 @@ if __name__ == "__main__":
             A=matrix_meas_dict[p_dict[key],M]
             Y= construct_measurements_randompool(s, M,A )
             # Apply the algorithm to obtain the estimated signal
+            st = time.process_time()
             z = algo(Y, A)
+            et = time.process_time()
+            # Update the total performance time for the current algorithm
+            tot_perf_time_dict[key] += (et-st)
             # Calculate the confusion matrix
             tot_confusion_dict[key] += confusion_matrix(s, z)
-            # print("Hamm:",hamming_distance(s,z),"\tkey:",key,"\tp:",p_dict[key])
-            # print(z,"\n",s)
+        print(key+":"+str(tot_perf_time_dict[key]))
 
-    plot_confusion_matrices(tot_confusion_dict)
+    plot_confusion_matrices(tot_confusion_dict,p_dict)
